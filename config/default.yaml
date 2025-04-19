@@ -14,13 +14,30 @@ loss:
   lambda_self: 0.5
 
 train:
-  dataset: "data/corpus.txt"
+  # Dataset settings
+  datasets:  # List of datasets with their configurations
+    - name: "papers"
+      subset: "pubmed"  # Use pubmed subset of scientific papers
+  # Example of using multiple datasets:
+  # datasets:
+  #   - name: "wikitext"
+  #     subset: "wikitext-103-v1"
+  #   - name: "code"
+  #     subset: "python"
+  #   - name: "papers"
+  #     subset: "pubmed"
   max_seq: 128
   batch_size: 8
+  
+  # Training parameters
   lr: 2.0e-5
-  warmup: 500
-  steps: 100000
+  warmup: 1000
+  steps: 50000  # Total training steps
+  
+  # Logging and checkpoints
   ckpt_dir: "checkpoints"
-  log_every: 20
-  save_every: 2000
+  log_every: 10
+  save_every: 1000
+  
+  # Hardware
   device: "mps" 

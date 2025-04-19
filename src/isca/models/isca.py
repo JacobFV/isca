@@ -13,7 +13,7 @@ class ISCA(nn.Module):
 
         # Load GPT-2 model
         model = AutoModelForCausalLM.from_pretrained(
-            cfg["backbone"], trust_remote_code=True, torch_dtype=torch.bfloat16
+            cfg["backbone"], trust_remote_code=True, torch_dtype=torch.float32  # Changed to float32 for MPS compatibility
         )
         # Access GPT-2 transformer directly
         self.backbone = model.transformer
@@ -52,24 +52,32 @@ class ISCA(nn.Module):
         """
         produce role‑conditioned attention pass‑through mask
         """
-        # Convert role projection weights to match h dtype
-        if self.role_proj_q.weight.dtype != h.dtype:
-            self.role_proj_q.weight = nn.Parameter(self.role_proj_q.weight.to(h.dtype))
-        if self.role_proj_k.weight.dtype != h.dtype:
-            self.role_proj_k.weight = nn.Parameter(self.role_proj_k.weight.to(h.dtype))
+        # Ensure input is float32
+        h = h.to(torch.float32)
         
-        q = F.normalize(self.role_proj_q(h), dim=-1)  # (b,n,h)
-        k = F.normalize(self.role_proj_k(h), dim=-1)  # (b,n,h)
-        sim = torch.einsum("bnh,bmh->bhnm", q, k)  # (b,h,n,m)
-        return (sim / self.tau_role).softmax(-1)
+        # Project and normalize with proper shape handling
+        q = self.role_proj_q(h)  # (b,n,h)
+        k = self.role_proj_k(h)  # (b,n,h)
+        
+        # Normalize along last dimension
+        q = F.normalize(q, dim=-1)
+        k = F.normalize(k, dim=-1)
+        
+        # Compute similarity with explicit shapes
+        sim = torch.matmul(q.transpose(1, 2), k)  # (b,h,n,n)
+        
+        # Apply temperature scaling and softmax
+        sim = sim / self.tau_role
+        return F.softmax(sim, dim=-1)
 
     def forward(self, input_ids, attention_mask, labels, cfg, step):
+        # Convert attention mask to float32 for consistent dtype
+        attention_mask = attention_mask.to(torch.float32)
+        
         # GPT-2 specific embedding
         h = self.backbone.wte(input_ids)
+        h = h.to(torch.float32)  # Ensure float32 type
         encoder_blocks = self.backbone.h
-
-        # Convert attention mask to float or bool to match query dtype
-        attention_mask = attention_mask.to(h.dtype)
 
         # ----------------- encoder half ------------------ #
         for i, blk in enumerate(encoder_blocks):
@@ -84,19 +92,17 @@ class ISCA(nn.Module):
                 # build soft graph from assignments
                 A_soft = infer_soft_graph(assign)  # (b,n,n)
 
-                # memory integration - replace in-place operations
+                # memory integration - replace in-place operations with new tensor creation
                 if self.graph_memory is None:
-                    self.graph_memory = A_soft.detach()
+                    self.graph_memory = A_soft.detach().clone()
                 else:
-                    self.graph_memory = (
-                        cfg["gamma_mem"] * self.graph_memory
-                        + (1 - cfg["gamma_mem"]) * A_soft.detach()
-                    )
+                    new_memory = cfg["gamma_mem"] * self.graph_memory.to(A_soft.dtype) + (1 - cfg["gamma_mem"]) * A_soft.detach()
+                    self.graph_memory = new_memory.clone()
 
                 # ------------ operator flows -------------- #
                 flow_outs = [f(h) for f in self.flows]  # list[(b,n,d)]
                 # closure loss: pairwise composition distance
-                comp_loss = 0.0
+                comp_loss = torch.tensor(0.0, device=h.device, dtype=torch.float32)
                 for a in range(len(flow_outs)):
                     for b in range(len(flow_outs)):
                         c = (a + b) % len(flow_outs)
@@ -109,13 +115,9 @@ class ISCA(nn.Module):
 
                 # identity self‑loss
                 self_loss = self.identity(A_soft)
-                self.self_loss = torch.tensor(self_loss, device=h.device, dtype=h.dtype)
+                self.self_loss = torch.tensor(self_loss, device=h.device, dtype=torch.float32)
 
         # ---------------- lm head + role‑atten tuning --------------- #
-        # Convert lm_head weight to match h dtype
-        if self.lm_head.weight.dtype != h.dtype:
-            self.lm_head.weight = nn.Parameter(self.lm_head.weight.to(h.dtype))
-        
         logits = self.lm_head(h)
 
         # role‑similarity regularizer
