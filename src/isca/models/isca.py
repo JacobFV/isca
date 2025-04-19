@@ -1,6 +1,6 @@
 from __future__ import annotations
 import torch, torch.nn as nn, torch.nn.functional as F
-from transformers import AutoModel
+from transformers import AutoModel, AutoModelForCausalLM, AutoConfig
 from .attractor_symbol import AttractorSymbolLayer
 from .operator_flow     import OperatorFlow
 from .identity_tracker  import IdentityTracker
@@ -9,10 +9,29 @@ from ..utils.graph_utils import infer_soft_graph
 class ISCA(nn.Module):
     def __init__(self, cfg):
         super().__init__()
-        self.backbone = AutoModel.from_pretrained(cfg["backbone"])
+        
+        # Handle Kimi-VL model differently than standard models
+        if "Kimi-VL" in cfg["backbone"]:
+            # For Kimi models, load as CausalLM and extract the base model
+            model = AutoModelForCausalLM.from_pretrained(
+                cfg["backbone"], 
+                trust_remote_code=True,
+                torch_dtype=torch.bfloat16
+            )
+            # Access the underlying model (backbone only, no language model head)
+            self.backbone = model.model
+            self.vocab_size = model.config.vocab_size
+        else:
+            # Original loading for other models
+            self.backbone = AutoModel.from_pretrained(cfg["backbone"])
+            self.vocab_size = self.backbone.config.vocab_size
+            
         # freeze lower layers
-        for p in list(self.backbone.parameters())[: cfg["freeze_layers"] * 2]:
-            p.requires_grad_(False)
+        freeze_count = 0
+        for name, p in self.backbone.named_parameters():
+            if freeze_count < cfg["freeze_layers"] * 2:
+                p.requires_grad_(False)
+                freeze_count += 1
 
         dim   = cfg["hidden_dim"]
         k     = cfg["num_centroids"]
@@ -24,10 +43,22 @@ class ISCA(nn.Module):
         self.tau_role    = cfg["tau_role"]
         self.gamma_mem   = cfg["gamma_mem"]
 
-        self.lm_head     = nn.Linear(dim, self.backbone.config.vocab_size, bias=False)
+        self.lm_head     = nn.Linear(dim, self.vocab_size, bias=False)
 
-        # role heads per attention head
-        heads = self.backbone.config.num_attention_heads
+        # role heads per attention head - getting num_heads dynamically
+        try:
+            if hasattr(self.backbone.config, "num_attention_heads"):
+                heads = self.backbone.config.num_attention_heads
+            elif hasattr(self.backbone.config, "num_heads"):
+                heads = self.backbone.config.num_heads
+            else:
+                # For Kimi models which might have a different config structure
+                config = AutoConfig.from_pretrained(cfg["backbone"], trust_remote_code=True)
+                heads = config.num_attention_heads if hasattr(config, "num_attention_heads") else 32
+        except:
+            # Fallback to a reasonable default
+            heads = 32
+            
         self.role_proj_q = nn.Linear(dim, heads, bias=False)
         self.role_proj_k = nn.Linear(dim, heads, bias=False)
 
@@ -44,10 +75,34 @@ class ISCA(nn.Module):
         return (sim / self.tau_role).softmax(-1)
 
     def forward(self, input_ids, attention_mask, labels, cfg, step):
-        h = self.backbone.embeddings(input_ids)
+        # Handle embedding extraction based on model type
+        if hasattr(self.backbone, "embeddings"):
+            # Standard model like Llama
+            h = self.backbone.embeddings(input_ids)
+            encoder_blocks = self.backbone.h
+        elif hasattr(self.backbone, "embed_tokens"):
+            # Kimi model structure
+            h = self.backbone.embed_tokens(input_ids)
+            encoder_blocks = self.backbone.layers
+        else:
+            raise ValueError(f"Unsupported model architecture: {cfg['backbone']}")
+            
         # ----------------- encoder half ------------------ #
-        for i, blk in enumerate(self.backbone.h):
-            h = blk(h, attention_mask=attention_mask)[0]
+        for i, blk in enumerate(encoder_blocks):
+            # Different models use different argument structures for their blocks
+            try:
+                if hasattr(blk, "forward"):
+                    h = blk(h, attention_mask=attention_mask)[0]
+                else:
+                    h = blk(h, attention_mask=attention_mask)
+                    if isinstance(h, tuple):
+                        h = h[0]
+            except:
+                # Fallback with minimal arguments
+                h = blk(h)
+                if isinstance(h, tuple):
+                    h = h[0]
+                    
             if i == cfg["freeze_layers"]:
                 # ---------- symbol extraction ------------- #
                 attract, assign = self.attractor(h)

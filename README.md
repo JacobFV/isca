@@ -17,6 +17,15 @@ poetry install
 poetry run python -m src.isca.train
 ```
 
+## Base Models
+
+ISCA can work with different base language models:
+
+- Default: `moonshotai/Kimi-VL-A3B-Thinking` - An efficient MoE model with 16B total parameters, activating only 3B during inference, optimized for reasoning
+- Alternative: `meta-llama/Llama-2-7b-hf` - The original Llama 2 7B model
+
+To change the base model, modify the `backbone` parameter in `config/default.yaml`.
+
 ## Training
 
 The training process can be configured through the `config/default.yaml` file:
@@ -159,11 +168,11 @@ The ISCA model includes a HuggingFace wrapper that allows it to be used with the
 ```python
 from isca.utils.isca_hf import ISCAConfig, ISCAModelForCausalLM
 
-# Load a trained ISCA model
+# Load a trained ISCA model with Kimi-VL-A3B-Thinking backbone
 config = ISCAConfig(
-    backbone="meta-llama/Llama-2-7b-hf",
+    backbone="moonshotai/Kimi-VL-A3B-Thinking",
     freeze_layers=6,
-    hidden_dim=4096,
+    hidden_dim=3072,
     num_centroids=256,
     num_operator_flows=32,
     flow_depth=2,
