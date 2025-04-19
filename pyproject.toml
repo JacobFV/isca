@@ -1,0 +1,25 @@
+[project]
+name = "isca"
+version = "0.1.0"
+description = "Integrated Symbolic Cognition Architecture"
+authors = [
+    {name = "jacob",email = "jacobfv123@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "torch==2.2.0",
+    "transformers==4.40.0",
+    "tqdm==4.66.3",
+    "numpy==1.26.4",
+    "pyyaml==6.0",
+    "networkx==3.3"
+]
+
+[tool.poetry]
+packages = [{include = "isca", from = "src"}]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
