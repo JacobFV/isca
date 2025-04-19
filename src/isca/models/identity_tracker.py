@@ -19,7 +19,9 @@ class IdentityTracker(nn.Module):
         adj : (n,n) dense 0/1
         """
         n = adj.size(0)
-        g = nx.from_numpy_array(adj.cpu().numpy())
+        # Convert to float32 before converting to numpy
+        adj_float = adj.detach().float().cpu().numpy()
+        g = nx.from_numpy_array(adj_float)
         central = nx.eigenvector_centrality_numpy(g)
         scores = torch.tensor([central[i] for i in range(n)], device=adj.device)
         mask = torch.topk(scores, top_k, largest=True).indices

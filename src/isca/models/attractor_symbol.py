@@ -20,8 +20,8 @@ class AttractorSymbolLayer(nn.Module):
         # h : (b,n,d) ; assign : (b,n,k)
         counts = assign.sum(1).sum(0)  # (k,)
         summed = (assign.transpose(1, 2) @ h).sum(0)  # (k,d)
-        self.cluster_size.mul_(1 - self.ema).add_(self.ema * counts)
-        self.centroids.mul_(1 - self.ema).add_(
+        self.cluster_size = (1 - self.ema) * self.cluster_size + self.ema * counts
+        self.centroids = (1 - self.ema) * self.centroids + (
             self.ema * summed / (counts.unsqueeze(-1) + 1e-4)
         )
 
@@ -31,6 +31,10 @@ class AttractorSymbolLayer(nn.Module):
             attractors : projected embeddings (b,n,d)
             assign     : assignment weights   (b,n,k)
         """
+        # Convert centroids to the same dtype as h
+        if self.centroids.dtype != h.dtype:
+            self.centroids = self.centroids.to(h.dtype)
+        
         # cosine distance
         h_norm = F.normalize(h, dim=-1)
         c_norm = F.normalize(self.centroids, dim=-1)

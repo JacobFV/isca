@@ -15,12 +15,12 @@ loss:
 
 train:
   dataset: "data/corpus.txt"
-  max_seq: 2048
-  batch_size: 2
+  max_seq: 128
+  batch_size: 1
   lr: 2.0e-5
   warmup: 500
   steps: 100000
   ckpt_dir: "checkpoints"
   log_every: 20
   save_every: 2000
-  device: "mps" 
+  device: "cpu" 

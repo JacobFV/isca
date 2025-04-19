@@ -53,6 +53,12 @@ class ISCA(nn.Module):
         """
         produce role‑conditioned attention pass‑through mask
         """
+        # Convert role projection weights to match h dtype
+        if self.role_proj_q.weight.dtype != h.dtype:
+            self.role_proj_q.weight = nn.Parameter(self.role_proj_q.weight.to(h.dtype))
+        if self.role_proj_k.weight.dtype != h.dtype:
+            self.role_proj_k.weight = nn.Parameter(self.role_proj_k.weight.to(h.dtype))
+        
         q = F.normalize(self.role_proj_q(h), dim=-1)  # (b,n,h)
         k = F.normalize(self.role_proj_k(h), dim=-1)  # (b,n,h)
         sim = torch.einsum("bnh,bmh->bhnm", q, k)  # (b,h,n,m)
@@ -62,6 +68,9 @@ class ISCA(nn.Module):
         # GPT-2 specific embedding
         h = self.backbone.wte(input_ids)
         encoder_blocks = self.backbone.h
+
+        # Convert attention mask to float or bool to match query dtype
+        attention_mask = attention_mask.to(h.dtype)
 
         # ----------------- encoder half ------------------ #
         for i, blk in enumerate(encoder_blocks):
@@ -76,7 +85,7 @@ class ISCA(nn.Module):
                 # build soft graph from assignments
                 A_soft = infer_soft_graph(assign)  # (b,n,n)
 
-                # memory integration
+                # memory integration - replace in-place operations
                 if self.graph_memory is None:
                     self.graph_memory = A_soft.detach()
                 else:
@@ -100,9 +109,14 @@ class ISCA(nn.Module):
                 self.graph_adj = A_soft
 
                 # identity self‑loss
-                self.self_loss = self.identity(A_soft)
+                self_loss = self.identity(A_soft)
+                self.self_loss = torch.tensor(self_loss, device=h.device, dtype=h.dtype)
 
         # ---------------- lm head + role‑atten tuning --------------- #
+        # Convert lm_head weight to match h dtype
+        if self.lm_head.weight.dtype != h.dtype:
+            self.lm_head.weight = nn.Parameter(self.lm_head.weight.to(h.dtype))
+        
         logits = self.lm_head(h)
 
         # role‑similarity regularizer

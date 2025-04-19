@@ -16,4 +16,7 @@ class OperatorFlow(nn.Module):
         self.net = nn.Sequential(*layers)
 
     def forward(self, h):  # (b,n,d)
+        # Ensure the network weights are converted to the same dtype as input
+        if next(self.parameters()).dtype != h.dtype:
+            self.to(h.dtype)
         return h + self.net(h)
