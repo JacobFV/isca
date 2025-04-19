@@ -1,6 +1,6 @@
 from __future__ import annotations
 import torch, torch.nn as nn, torch.nn.functional as F
-from transformers import AutoModel, AutoModelForCausalLM, AutoConfig
+from transformers import AutoModelForCausalLM
 from isca.models.attractor_symbol import AttractorSymbolLayer
 from isca.models.operator_flow import OperatorFlow
 from isca.models.identity_tracker import IdentityTracker
@@ -11,18 +11,12 @@ class ISCA(nn.Module):
     def __init__(self, cfg):
         super().__init__()
 
-        # Load the model and extract the transformer layers
+        # Load GPT-2 model
         model = AutoModelForCausalLM.from_pretrained(
             cfg["backbone"], trust_remote_code=True, torch_dtype=torch.bfloat16
         )
-        # Access the underlying transformer model
-        if hasattr(model, "transformer"):
-            self.backbone = model.transformer
-        elif hasattr(model, "gpt_neox"):
-            self.backbone = model.gpt_neox
-        else:
-            raise ValueError(f"Unsupported model architecture: {cfg['backbone']}")
-            
+        # Access GPT-2 transformer directly
+        self.backbone = model.transformer
         self.vocab_size = model.config.vocab_size
 
         # freeze lower layers
@@ -46,18 +40,8 @@ class ISCA(nn.Module):
 
         self.lm_head = nn.Linear(dim, self.vocab_size, bias=False)
 
-        # role heads per attention head - getting num_heads dynamically
-        try:
-            if hasattr(self.backbone.config, "num_attention_heads"):
-                heads = self.backbone.config.num_attention_heads
-            elif hasattr(self.backbone.config, "num_heads"):
-                heads = self.backbone.config.num_heads
-            else:
-                # Default to a reasonable number if not found
-                heads = 16
-        except:
-            # Fallback to a reasonable default
-            heads = 16
+        # Get number of heads from GPT-2 config
+        heads = self.backbone.config.num_attention_heads
 
         self.role_proj_q = nn.Linear(dim, heads, bias=False)
         self.role_proj_k = nn.Linear(dim, heads, bias=False)
@@ -75,37 +59,14 @@ class ISCA(nn.Module):
         return (sim / self.tau_role).softmax(-1)
 
     def forward(self, input_ids, attention_mask, labels, cfg, step):
-        # Handle embedding extraction based on model type
-        if hasattr(self.backbone, "wte"):
-            # GPT-2 model
-            h = self.backbone.wte(input_ids)
-            encoder_blocks = self.backbone.h
-        elif hasattr(self.backbone, "embeddings"):
-            # Standard model like Llama
-            h = self.backbone.embeddings(input_ids)
-            encoder_blocks = self.backbone.h
-        elif hasattr(self.backbone, "embed_tokens"):
-            # Kimi model structure
-            h = self.backbone.embed_tokens(input_ids)
-            encoder_blocks = self.backbone.layers
-        else:
-            raise ValueError(f"Unsupported model architecture: {cfg['backbone']}")
+        # GPT-2 specific embedding
+        h = self.backbone.wte(input_ids)
+        encoder_blocks = self.backbone.h
 
         # ----------------- encoder half ------------------ #
         for i, blk in enumerate(encoder_blocks):
-            # Different models use different argument structures for their blocks
-            try:
-                if hasattr(blk, "forward"):
-                    h = blk(h, attention_mask=attention_mask)[0]
-                else:
-                    h = blk(h, attention_mask=attention_mask)
-                    if isinstance(h, tuple):
-                        h = h[0]
-            except:
-                # Fallback with minimal arguments
-                h = blk(h)
-                if isinstance(h, tuple):
-                    h = h[0]
+            # GPT-2 blocks take (h, attention_mask) and return a tuple
+            h = blk(h, attention_mask=attention_mask)[0]
 
             if i == cfg["freeze_layers"]:
                 # ---------- symbol extraction ------------- #
