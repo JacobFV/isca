@@ -1,5 +1,5 @@
 from __future__ import annotations
-import yaml, torch, os, argparse
+import yaml, torch, os
 from pathlib import Path
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -10,14 +10,7 @@ from .utils.sched import WarmupCosine
 
 def load_cfg(path): return yaml.safe_load(Path(path).read_text())
 
-def main(args=None):
-    if args is None:
-        # Parse command line arguments
-        parser = argparse.ArgumentParser(description="Train the ISCA model")
-        parser.add_argument("--config", type=str, default="config/default.yaml", 
-                           help="Path to the configuration file")
-        args = parser.parse_args()
-    
+def main(args):
     cfg_path = args.config
     print(f"Loading configuration from {cfg_path}")
     
@@ -50,7 +43,4 @@ def main(args=None):
                 torch.save(model.state_dict(), checkpoint_path)
                 print(f"\nSaved checkpoint to {checkpoint_path}")
 
-            if step >= cfg_t["steps"]: break
-
-if __name__ == "__main__":
-    main() 
+            if step >= cfg_t["steps"]: break 
