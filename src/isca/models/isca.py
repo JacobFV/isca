@@ -16,7 +16,13 @@ class ISCA(nn.Module):
             cfg["backbone"], trust_remote_code=True, torch_dtype=torch.bfloat16
         )
         # Access the underlying transformer model
-        self.backbone = model.transformer
+        if hasattr(model, "transformer"):
+            self.backbone = model.transformer
+        elif hasattr(model, "gpt_neox"):
+            self.backbone = model.gpt_neox
+        else:
+            raise ValueError(f"Unsupported model architecture: {cfg['backbone']}")
+            
         self.vocab_size = model.config.vocab_size
 
         # freeze lower layers
@@ -70,7 +76,11 @@ class ISCA(nn.Module):
 
     def forward(self, input_ids, attention_mask, labels, cfg, step):
         # Handle embedding extraction based on model type
-        if hasattr(self.backbone, "embeddings"):
+        if hasattr(self.backbone, "wte"):
+            # GPT-2 model
+            h = self.backbone.wte(input_ids)
+            encoder_blocks = self.backbone.h
+        elif hasattr(self.backbone, "embeddings"):
             # Standard model like Llama
             h = self.backbone.embeddings(input_ids)
             encoder_blocks = self.backbone.h
