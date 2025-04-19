@@ -28,9 +28,11 @@ def main(args):
     opt = torch.optim.AdamW(model.parameters(), lr=cfg_t["lr"])
     sched = WarmupCosine(opt, cfg_t["warmup"], cfg_t["steps"], cfg_t["lr"])
 
-    step, ckpt_dir = 0, Path(cfg_t["ckpt_dir"])
+    step = 0
+    ckpt_dir = Path(cfg_t["ckpt_dir"])
     ckpt_dir.mkdir(exist_ok=True)
     pbar = tqdm(total=cfg_t["steps"])
+    
     while step < cfg_t["steps"]:
         for batch in dl:
             step += 1

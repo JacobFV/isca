@@ -48,7 +48,6 @@ class ISCA(nn.Module):
 
         self.graph_memory: torch.Tensor | None = None
 
-    # ------------------------------------------------------------------ #
     def _role_similarity(self, h):
         """
         produce role‑conditioned attention pass‑through mask

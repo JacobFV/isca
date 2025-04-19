@@ -1,7 +1,7 @@
 model:
-  backbone: "gpt2-medium"
+  backbone: "gpt2"
   freeze_layers: 6
-  hidden_dim: 1024
+  hidden_dim: 768
   num_centroids: 256
   num_operator_flows: 32
   flow_depth: 2
@@ -16,11 +16,11 @@ loss:
 train:
   dataset: "data/corpus.txt"
   max_seq: 128
-  batch_size: 1
+  batch_size: 8
   lr: 2.0e-5
   warmup: 500
   steps: 100000
   ckpt_dir: "checkpoints"
   log_every: 20
   save_every: 2000
-  device: "cpu" 
+  device: "mps" 
