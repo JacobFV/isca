@@ -1,6 +1,6 @@
 import argparse
 import torch
-from isca.eval import main
+from isca.eval.main import main
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

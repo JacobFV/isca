@@ -8,13 +8,18 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "torch==2.2.0",
-    "transformers==4.40.0",
-    "tqdm==4.66.3",
-    "numpy==1.26.4",
-    "pyyaml==6.0",
-    "networkx==3.3",
-    "agisdk"
+    "torch",
+    "transformers",
+    "tqdm",
+    "numpy",
+    "pyyaml",
+    "networkx",
+    "agisdk",
+    "langchain",
+    "langchain-openai",
+    "langchain-anthropic", 
+    "langchain-google-genai",
+    "langchain-huggingface"
 ]
 
 [tool.poetry]
