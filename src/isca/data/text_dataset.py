@@ -7,7 +7,7 @@ from transformers import AutoTokenizer
 
 class TextDataset(Dataset):
     def __init__(self, file_path, model_name, max_len):
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True, trust_remote_code=True)
         self.max_len = max_len
         self.lines = Path(file_path).read_text().splitlines()
 

@@ -1,0 +1,4 @@
+The quick brown fox jumps over the lazy dog.
+Machine learning models can process and understand natural language.
+Symbolic reasoning helps AI systems make logical deductions.
+The integration of neural networks with symbolic systems enhances AI capabilities. 

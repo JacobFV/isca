@@ -61,7 +61,6 @@ if __name__ == "__main__":
         "--config",
         "-c",
         type=str,
-        required=True,
         default="config/default.yaml",
         help="Path to the configuration YAML file",
     )

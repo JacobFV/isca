@@ -1,7 +1,7 @@
 model:
-  backbone: "moonshotai/Kimi-VL-A3B-Thinking"
+  backbone: "gpt2-medium"
   freeze_layers: 6
-  hidden_dim: 3072          # Kimi-VL-A3B has 3072 dim instead of 4096
+  hidden_dim: 1024
   num_centroids: 256
   num_operator_flows: 32
   flow_depth: 2
@@ -23,4 +23,4 @@ train:
   ckpt_dir: "checkpoints"
   log_every: 20
   save_every: 2000
-  device: "cuda" 
+  device: "mps" 

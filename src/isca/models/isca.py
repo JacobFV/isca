@@ -11,19 +11,13 @@ class ISCA(nn.Module):
     def __init__(self, cfg):
         super().__init__()
 
-        # Handle Kimi-VL model differently than standard models
-        if "Kimi-VL" in cfg["backbone"]:
-            # For Kimi models, load as CausalLM and extract the base model
-            model = AutoModelForCausalLM.from_pretrained(
-                cfg["backbone"], trust_remote_code=True, torch_dtype=torch.bfloat16
-            )
-            # Access the underlying model (backbone only, no language model head)
-            self.backbone = model.model
-            self.vocab_size = model.config.vocab_size
-        else:
-            # Original loading for other models
-            self.backbone = AutoModel.from_pretrained(cfg["backbone"])
-            self.vocab_size = self.backbone.config.vocab_size
+        # Load the model and extract the transformer layers
+        model = AutoModelForCausalLM.from_pretrained(
+            cfg["backbone"], trust_remote_code=True, torch_dtype=torch.bfloat16
+        )
+        # Access the underlying transformer model
+        self.backbone = model.transformer
+        self.vocab_size = model.config.vocab_size
 
         # freeze lower layers
         freeze_count = 0
@@ -53,18 +47,11 @@ class ISCA(nn.Module):
             elif hasattr(self.backbone.config, "num_heads"):
                 heads = self.backbone.config.num_heads
             else:
-                # For Kimi models which might have a different config structure
-                config = AutoConfig.from_pretrained(
-                    cfg["backbone"], trust_remote_code=True
-                )
-                heads = (
-                    config.num_attention_heads
-                    if hasattr(config, "num_attention_heads")
-                    else 32
-                )
+                # Default to a reasonable number if not found
+                heads = 16
         except:
             # Fallback to a reasonable default
-            heads = 32
+            heads = 16
 
         self.role_proj_q = nn.Linear(dim, heads, bias=False)
         self.role_proj_k = nn.Linear(dim, heads, bias=False)
