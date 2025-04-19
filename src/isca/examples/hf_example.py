@@ -5,7 +5,7 @@ import argparse
 import os
 from pathlib import Path
 
-from ..models.isca_hf import ISCAConfig, ISCAModelForCausalLM
+from ..utils.isca_hf import ISCAConfig, ISCAModelForCausalLM
 
 def main():
     parser = argparse.ArgumentParser(description="Demo the ISCA HuggingFace wrapper")

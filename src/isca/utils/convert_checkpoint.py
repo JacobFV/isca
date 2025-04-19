@@ -10,7 +10,7 @@ import sys
 # Add parent directory to path to allow importing from parent package
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from isca.models.isca_hf import ISCAConfig, ISCAModelForCausalLM
+from isca.utils.isca_hf import ISCAConfig, ISCAModelForCausalLM
 from transformers import AutoTokenizer
 
 def convert_checkpoint(checkpoint_path, config_path, output_dir, push_to_hub=None):

@@ -19,7 +19,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 # ISCA model imports
-from ..models.isca_hf import ISCAConfig, ISCAModelForCausalLM
+from ..utils.isca_hf import ISCAConfig, ISCAModelForCausalLM
 
 def format_example(example, use_cot=True):
     """Format an MMLU-Pro example into a prompt for the model.

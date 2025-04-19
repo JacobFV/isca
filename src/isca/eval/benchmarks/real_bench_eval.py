@@ -15,7 +15,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 # ISCA model imports
-from ..models.isca_hf import ISCAConfig, ISCAModelForCausalLM
+from ..utils.isca_hf import ISCAConfig, ISCAModelForCausalLM
 
 def setup_isca_for_real_bench(checkpoint_path, device="cuda"):
     """Set up the ISCA model for REAL Bench evaluation."""
