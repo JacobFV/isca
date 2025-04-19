@@ -4,13 +4,15 @@ import torch
 from torch.utils.data import Dataset
 from transformers import AutoTokenizer
 
+
 class TextDataset(Dataset):
     def __init__(self, file_path, model_name, max_len):
         self.tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        self.max_len   = max_len
+        self.max_len = max_len
         self.lines = Path(file_path).read_text().splitlines()
 
-    def __len__(self): return len(self.lines)
+    def __len__(self):
+        return len(self.lines)
 
     def __getitem__(self, idx):
         e = self.tokenizer(
@@ -22,4 +24,4 @@ class TextDataset(Dataset):
         )
         item = {k: v.squeeze(0) for k, v in e.items()}
         item["labels"] = item["input_ids"].clone()
-        return item 
+        return item

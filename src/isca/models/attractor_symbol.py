@@ -1,6 +1,7 @@
 from __future__ import annotations
 import torch, torch.nn as nn, torch.nn.functional as F
 
+
 class AttractorSymbolLayer(nn.Module):
     """
     learnable set of centroids (k‑means style) + differentiable assignment.
@@ -17,10 +18,12 @@ class AttractorSymbolLayer(nn.Module):
     @torch.no_grad()
     def _ema_update(self, h, assign):
         # h : (b,n,d) ; assign : (b,n,k)
-        counts = assign.sum(1).sum(0)          # (k,)
-        summed = (assign.transpose(1,2) @ h).sum(0)  # (k,d)
-        self.cluster_size.mul_(1-self.ema).add_(self.ema * counts)
-        self.centroids.mul_(1-self.ema).add_(self.ema * summed / (counts.unsqueeze(-1)+1e-4))
+        counts = assign.sum(1).sum(0)  # (k,)
+        summed = (assign.transpose(1, 2) @ h).sum(0)  # (k,d)
+        self.cluster_size.mul_(1 - self.ema).add_(self.ema * counts)
+        self.centroids.mul_(1 - self.ema).add_(
+            self.ema * summed / (counts.unsqueeze(-1) + 1e-4)
+        )
 
     def forward(self, h: torch.Tensor):
         """
@@ -31,11 +34,11 @@ class AttractorSymbolLayer(nn.Module):
         # cosine distance
         h_norm = F.normalize(h, dim=-1)
         c_norm = F.normalize(self.centroids, dim=-1)
-        logits  = h_norm @ c_norm.T                          # (b,n,k)
-        assign  = F.softmax(logits, dim=-1)
-        attract = assign @ self.centroids                   # (b,n,d)
+        logits = h_norm @ c_norm.T  # (b,n,k)
+        assign = F.softmax(logits, dim=-1)
+        attract = assign @ self.centroids  # (b,n,d)
 
         if self.training:  # EMA centroid update
             self._ema_update(h, assign.detach())
 
-        return attract, assign 
+        return attract, assign

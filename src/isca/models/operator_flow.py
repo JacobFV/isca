@@ -1,6 +1,7 @@
 from __future__ import annotations
 import torch, torch.nn as nn
 
+
 class OperatorFlow(nn.Module):
     """
     family of learnable vector‑field operators; closure regularized.
@@ -15,4 +16,4 @@ class OperatorFlow(nn.Module):
         self.net = nn.Sequential(*layers)
 
     def forward(self, h):  # (b,n,d)
-        return h + self.net(h) 
+        return h + self.net(h)

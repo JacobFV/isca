@@ -1,22 +1,21 @@
 from __future__ import annotations
 import torch, torch.nn as nn, torch.nn.functional as F
 from transformers import AutoModel, AutoModelForCausalLM, AutoConfig
-from .attractor_symbol import AttractorSymbolLayer
-from .operator_flow     import OperatorFlow
-from .identity_tracker  import IdentityTracker
-from ..utils.graph_utils import infer_soft_graph
+from isca.models.attractor_symbol import AttractorSymbolLayer
+from isca.models.operator_flow import OperatorFlow
+from isca.models.identity_tracker import IdentityTracker
+from isca.utils.graph_utils import infer_soft_graph
+
 
 class ISCA(nn.Module):
     def __init__(self, cfg):
         super().__init__()
-        
+
         # Handle Kimi-VL model differently than standard models
         if "Kimi-VL" in cfg["backbone"]:
             # For Kimi models, load as CausalLM and extract the base model
             model = AutoModelForCausalLM.from_pretrained(
-                cfg["backbone"], 
-                trust_remote_code=True,
-                torch_dtype=torch.bfloat16
+                cfg["backbone"], trust_remote_code=True, torch_dtype=torch.bfloat16
             )
             # Access the underlying model (backbone only, no language model head)
             self.backbone = model.model
@@ -25,7 +24,7 @@ class ISCA(nn.Module):
             # Original loading for other models
             self.backbone = AutoModel.from_pretrained(cfg["backbone"])
             self.vocab_size = self.backbone.config.vocab_size
-            
+
         # freeze lower layers
         freeze_count = 0
         for name, p in self.backbone.named_parameters():
@@ -33,17 +32,19 @@ class ISCA(nn.Module):
                 p.requires_grad_(False)
                 freeze_count += 1
 
-        dim   = cfg["hidden_dim"]
-        k     = cfg["num_centroids"]
+        dim = cfg["hidden_dim"]
+        k = cfg["num_centroids"]
         flows = cfg["num_operator_flows"]
 
-        self.attractor   = AttractorSymbolLayer(dim, k)
-        self.flows       = nn.ModuleList([OperatorFlow(dim, cfg["flow_depth"]) for _ in range(flows)])
-        self.identity    = IdentityTracker()
-        self.tau_role    = cfg["tau_role"]
-        self.gamma_mem   = cfg["gamma_mem"]
+        self.attractor = AttractorSymbolLayer(dim, k)
+        self.flows = nn.ModuleList(
+            [OperatorFlow(dim, cfg["flow_depth"]) for _ in range(flows)]
+        )
+        self.identity = IdentityTracker()
+        self.tau_role = cfg["tau_role"]
+        self.gamma_mem = cfg["gamma_mem"]
 
-        self.lm_head     = nn.Linear(dim, self.vocab_size, bias=False)
+        self.lm_head = nn.Linear(dim, self.vocab_size, bias=False)
 
         # role heads per attention head - getting num_heads dynamically
         try:
@@ -53,12 +54,18 @@ class ISCA(nn.Module):
                 heads = self.backbone.config.num_heads
             else:
                 # For Kimi models which might have a different config structure
-                config = AutoConfig.from_pretrained(cfg["backbone"], trust_remote_code=True)
-                heads = config.num_attention_heads if hasattr(config, "num_attention_heads") else 32
+                config = AutoConfig.from_pretrained(
+                    cfg["backbone"], trust_remote_code=True
+                )
+                heads = (
+                    config.num_attention_heads
+                    if hasattr(config, "num_attention_heads")
+                    else 32
+                )
         except:
             # Fallback to a reasonable default
             heads = 32
-            
+
         self.role_proj_q = nn.Linear(dim, heads, bias=False)
         self.role_proj_k = nn.Linear(dim, heads, bias=False)
 
@@ -71,7 +78,7 @@ class ISCA(nn.Module):
         """
         q = F.normalize(self.role_proj_q(h), dim=-1)  # (b,n,h)
         k = F.normalize(self.role_proj_k(h), dim=-1)  # (b,n,h)
-        sim = torch.einsum("bnh,bmh->bhnm", q, k)     # (b,h,n,m)
+        sim = torch.einsum("bnh,bmh->bhnm", q, k)  # (b,h,n,m)
         return (sim / self.tau_role).softmax(-1)
 
     def forward(self, input_ids, attention_mask, labels, cfg, step):
@@ -86,7 +93,7 @@ class ISCA(nn.Module):
             encoder_blocks = self.backbone.layers
         else:
             raise ValueError(f"Unsupported model architecture: {cfg['backbone']}")
-            
+
         # ----------------- encoder half ------------------ #
         for i, blk in enumerate(encoder_blocks):
             # Different models use different argument structures for their blocks
@@ -102,14 +109,14 @@ class ISCA(nn.Module):
                 h = blk(h)
                 if isinstance(h, tuple):
                     h = h[0]
-                    
+
             if i == cfg["freeze_layers"]:
                 # ---------- symbol extraction ------------- #
                 attract, assign = self.attractor(h)
-                h = h + attract                              # inject symbols
+                h = h + attract  # inject symbols
 
                 # build soft graph from assignments
-                A_soft = infer_soft_graph(assign)           # (b,n,n)
+                A_soft = infer_soft_graph(assign)  # (b,n,n)
 
                 # memory integration
                 if self.graph_memory is None:
@@ -121,7 +128,7 @@ class ISCA(nn.Module):
                     )
 
                 # ------------ operator flows -------------- #
-                flow_outs = [f(h) for f in self.flows]      # list[(b,n,d)]
+                flow_outs = [f(h) for f in self.flows]  # list[(b,n,d)]
                 # closure loss: pairwise composition distance
                 comp_loss = 0.0
                 for a in range(len(flow_outs)):
@@ -131,7 +138,7 @@ class ISCA(nn.Module):
                 comp_loss = comp_loss / (len(flow_outs) ** 2)
 
                 self.comp_loss = comp_loss
-                self.assign    = assign
+                self.assign = assign
                 self.graph_adj = A_soft
 
                 # identity self‑loss
@@ -144,13 +151,13 @@ class ISCA(nn.Module):
         role_attn = self._role_similarity(h)
         role_loss = (role_attn * (1 - role_attn)).mean()  # encourage crisp roles
 
-        ce_loss   = F.cross_entropy(
+        ce_loss = F.cross_entropy(
             logits.view(-1, logits.size(-1)), labels.view(-1), ignore_index=-100
         )
 
         total = (
             ce_loss
-            + cfg["lambda_sym"]  * (h - attract.detach()).pow(2).mean()
+            + cfg["lambda_sym"] * (h - attract.detach()).pow(2).mean()
             + cfg["lambda_flow"] * self.comp_loss
             + cfg["lambda_self"] * self.self_loss
             + role_loss * 0.1
@@ -163,4 +170,4 @@ class ISCA(nn.Module):
             "flow": self.comp_loss.detach(),
             "self": self.self_loss.detach(),
             "role": role_loss.detach(),
-        } 
+        }

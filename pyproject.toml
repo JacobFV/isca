@@ -21,8 +21,12 @@ dependencies = [
     "langchain-google-genai",
     "langchain-huggingface",
     "accelerate",
-    "bitsandbytes",
-    "safetensors"
+    "safetensors",
+    "datasets",
+    "scipy",
+    "matplotlib",
+    "seaborn",
+    "scikit-learn",
 ]
 
 [tool.poetry]

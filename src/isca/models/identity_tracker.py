@@ -2,6 +2,7 @@ from __future__ import annotations
 import torch, torch.nn as nn, torch.nn.functional as F
 import networkx as nx
 
+
 class IdentityTracker(nn.Module):
     """
     tracks persistence of the 'self' subgraph; exposes spectral‑persistence loss.
@@ -20,8 +21,8 @@ class IdentityTracker(nn.Module):
         n = adj.size(0)
         g = nx.from_numpy_array(adj.cpu().numpy())
         central = nx.eigenvector_centrality_numpy(g)
-        scores  = torch.tensor([central[i] for i in range(n)], device=adj.device)
-        mask    = torch.topk(scores, top_k, largest=True).indices
+        scores = torch.tensor([central[i] for i in range(n)], device=adj.device)
+        mask = torch.topk(scores, top_k, largest=True).indices
         return adj[mask][:, mask]
 
     def forward(self, adj: torch.Tensor):
@@ -38,4 +39,4 @@ class IdentityTracker(nn.Module):
                 loss += (sub - prev_sub).pow(2).mean()
         if self.training:
             self.prev_adj = adj.detach()
-        return loss / max(B,1) 
+        return loss / max(B, 1)
